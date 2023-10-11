@@ -37,151 +37,139 @@
  * @author Mickey Cowden <info@cowden.tech>
  * @author Nuno Marques <nuno.marques@dronesolutions.io>
  */
-
-#include <px4_msgs/msg/offboard_control_mode.hpp>
-#include <px4_msgs/msg/trajectory_setpoint.hpp>
-#include <px4_msgs/msg/vehicle_command.hpp>
-#include <px4_msgs/msg/vehicle_control_mode.hpp>
-#include <rclcpp/rclcpp.hpp>
-#include <stdint.h>
-
 #include <chrono>
 #include <iostream>
+#include <string>
+#include <stdio.h>
+#include <stdint.h>
+
+#include <rclcpp/rclcpp.hpp>
+#include <cmath>
+// #include <Eigen/Eigen>
+// #include <Eigen/Geometry>
+
+#include <px4_msgs/msg/vehicle_status.hpp>
+#include <px4_msgs/msg/vehicle_control_mode.hpp>
+#include <px4_msgs/msg/vehicle_global_position.hpp>
+#include <px4_msgs/msg/vehicle_attitude.hpp>
+#include <px4_msgs/msg/vehicle_local_position.hpp>
+
 
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace px4_msgs::msg;
 
-class OffboardControl : public rclcpp::Node
+class OffbRecv : public rclcpp::Node
 {
 public:
-	OffboardControl() : Node("offboard_control")
+	OffbRecv() : Node("offb_recv")
 	{
-
-		offboard_control_mode_pub_  = this->create_publisher<OffboardControlMode>(  "/fmu/in/offboard_control_mode",    10);
-		trajectory_setpoint_pub_    = this->create_publisher<TrajectorySetpoint>(   "/fmu/in/trajectory_setpoint",      10);
-		vehicle_command_pub_        = this->create_publisher<VehicleCommand>(       "/fmu/in/vehicle_command",          10);
-
 		offboard_setpoint_counter_ = 0;
 
-		auto timer_callback = [this]() -> void {
+		rmw_qos_profile_t qos_profile = rmw_qos_profile_sensor_data;
+		auto qos = rclcpp::QoS(rclcpp::QoSInitialization(qos_profile.history, 5), qos_profile);
 
-			if (offboard_setpoint_counter_ == 10) {
-				// Change to Offboard mode after 10 setpoints
-				this->publish_vehicle_command(VehicleCommand::VEHICLE_CMD_DO_SET_MODE, 1, 6);
-
-				// Arm the vehicle
-				this->arm();
-			}
-
-			// offboard_control_mode needs to be paired with trajectory_setpoint
-			publish_offboard_control_mode();
-			publish_trajectory_setpoint();
-
-			// stop the counter after reaching 11
-			if (offboard_setpoint_counter_ < 11) {
-				offboard_setpoint_counter_++;
-			}
-		};
-		timer_ = this->create_wall_timer(100ms, timer_callback);
+		target_name = "/px4_1/fmu";
+		std::cout << target_name + "/out/vehicle_status" << std::endl;
+		// vehicle_status_sub_ 			= this->create_subscription<VehicleStatus>(
+		// 	target_name + "/out/vehicle_status", qos,
+		// 	std::bind(&OffbRecv::vehicle_status_cb, this, std::placeholders::_1));
+		vehicle_global_position_sub_	= this->create_subscription<VehicleGlobalPosition>(
+			target_name + "/out/vehicle_global_position", qos,
+			std::bind(&OffbRecv::vehicle_global_position_cb, this, std::placeholders::_1));
+		// vehicle_local_position_sub_		= this->create_subscription<VehicleLocalPosition>(
+		// 	target_name + "/out/vehicle_local_position", qos,
+		// 	std::bind(&OffbRecv::vehicle_local_position_cb, this, std::placeholders::_1));
+		// vehicle_attitude_sub_			= this->create_subscription<VehicleAttitude>(
+		// 	target_name + "/out/vehicle_attitude", qos,
+		// 	std::bind(&OffbRecv::vehicle_attitude_cb, this, std::placeholders::_1));
+		// vehicle_control_mode_sub_ 		= this->create_subscription<VehicleControlMode>(	target_name + "/out/vehicle_control_mode", 1);
+		// vehicle_global_position_sub_ 	= this->create_subscription<VehicleGlobalPosition>(target_name + "/out/vehicle_global_position", 1);
+		// vehicle_local_position_sub_ 	= this->create_subscription<VehicleLocalPosition>(	target_name + "/out/vehicle_local_position", 1);
 	}
 
-	void arm();
-	void disarm();
+	void vehicle_status_cb(const VehicleStatus::UniquePtr msg) const{
+		// this->offboard_setpoint_counter_++;
+		std::cout << "Receivec Vehicle Status : " << std::endl;
+		std::cout << "timestamp							" << msg->timestamp << std::endl;
+		std::cout << "nav_state_timestamp				" << msg->nav_state_timestamp << std::endl;
+		std::cout << "nav_state							" << msg->nav_state << std::endl;
+		std::cout << "failure_detector_status			" << msg->failure_detector_status << std::endl;
+		std::cout << "vehicle_type						" << msg->vehicle_type << std::endl;
+		std::cout << "failsafe							" << msg->failsafe << std::endl;
+		std::cout << "is_vtol							" << msg->is_vtol << std::endl;
+		std::cout << "is_vtol_tailsitter				" << msg->is_vtol_tailsitter << std::endl;
+		std::cout << "in_transition_mode				" << msg->in_transition_mode << std::endl;
+		std::cout << "in_transition_to_fw				" << msg->in_transition_to_fw << std::endl;
+		std::cout << "system_type						" << msg->system_type << std::endl;
+		std::cout << "system_id							" << msg->system_id << std::endl;
+		std::cout << "component_id						" << msg->component_id << std::endl;
+		std::cout << "power_input_valid					" << msg->power_input_valid << std::endl;
+		std::cout << "usb_connected						" << msg->usb_connected << std::endl;
+	}
+
+	void vehicle_global_position_cb(const VehicleGlobalPosition::UniquePtr msg){
+		timestamp = msg->timestamp;
+		lat = msg->lat;
+		lon = msg->lon;
+		alt = msg->alt;
+		double sec 	= double(msg->timestamp/1000000);
+		double usec = double(msg->timestamp - ((msg->timestamp/1000000)*1000000));
+		// printf("Time %20.0f.%6.0f / ", sec, usec);
+		printf("Time %20.6f ", double(msg->timestamp)/1000000.0);
+		printf("LLA %10.6f %10.6f %8.2f\n", msg->lat, msg->lon, msg->alt);
+	}
+	void vehicle_local_position_cb(const VehicleLocalPosition::UniquePtr msg){
+		acc[0] = float(msg->ax);
+		acc[1] = float(msg->ay);
+		acc[2] = float(msg->az);
+		vel[0] = float(msg->vx);
+		vel[1] = float(msg->vy);
+		vel[2] = float(msg->vz);
+		// this->vel = Eigen::Vector3d(msg->vx, msg->vy, msg->vz);
+		// this->acc = Eigen::Vector3d(msg->ax, msg->ay, msg->az);
+	}
+	void vehicle_attitude_cb(const VehicleAttitude::UniquePtr msg){
+		q[0] = msg->q[0];
+		q[1] = msg->q[1];
+		q[2] = msg->q[2];
+		q[3] = msg->q[3];
+		// this->q = Eigen::Quaterniond(msg->q[0], msg->q[1], msg->q[2], msg->q[3]);
+		// this->euler = q.toRotationMatrix().eulerAngles(2, 1, 0);
+	}
 
 private:
-	rclcpp::TimerBase::SharedPtr timer_;
-
-	rclcpp::Publisher<OffboardControlMode>::SharedPtr offboard_control_mode_pub_;
-	rclcpp::Publisher<TrajectorySetpoint>::SharedPtr trajectory_setpoint_pub_;
-	rclcpp::Publisher<VehicleCommand>::SharedPtr vehicle_command_pub_;
-
-	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
-
+	std::string target_name;
 	uint64_t offboard_setpoint_counter_;   //!< counter for the number of setpoints sent
 
-	void publish_offboard_control_mode();
-	void publish_trajectory_setpoint();
-	void publish_vehicle_command(uint16_t command, float param1 = 0.0, float param2 = 0.0);
+	rclcpp::Subscription<VehicleStatus>::SharedPtr 			vehicle_status_sub_;
+	rclcpp::Subscription<VehicleControlMode>::SharedPtr		vehicle_control_mode_sub_;
+	rclcpp::Subscription<VehicleGlobalPosition>::SharedPtr 	vehicle_global_position_sub_;
+	rclcpp::Subscription<VehicleAttitude>::SharedPtr 		vehicle_attitude_sub_;
+	rclcpp::Subscription<VehicleLocalPosition>::SharedPtr 	vehicle_local_position_sub_;
+
+	uint64_t timestamp;
+	double lat;
+	double lon;
+	float alt;
+	float q[4];
+	float acc[3];
+	float vel[3];
+	float euler[3];
+	// Eigen::Quaterniond q;
+	// Eigen::Vector3d vel;
+	// Eigen::Vector3d acc;
+	// Eigen::Vector3d euler;
+
+	std::atomic<uint64_t> timestamp_;   //!< common synced timestamped
 };
-
-/**
- * @brief Send a command to Arm the vehicle
- */
-void OffboardControl::arm()
-{
-	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 1.0);
-
-	RCLCPP_INFO(this->get_logger(), "Arm command send");
-}
-
-/**
- * @brief Send a command to Disarm the vehicle
- */
-void OffboardControl::disarm()
-{
-	publish_vehicle_command(VehicleCommand::VEHICLE_CMD_COMPONENT_ARM_DISARM, 0.0);
-
-	RCLCPP_INFO(this->get_logger(), "Disarm command send");
-}
-
-/**
- * @brief Publish the offboard control mode.
- *        For this example, only position and altitude controls are active.
- */
-void OffboardControl::publish_offboard_control_mode()
-{
-	OffboardControlMode msg{};
-	msg.position = true;
-	msg.velocity = false;
-	msg.acceleration = false;
-	msg.attitude = false;
-	msg.body_rate = false;
-	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-	offboard_control_mode_pub_->publish(msg);
-}
-
-/**
- * @brief Publish a trajectory setpoint
- *        For this example, it sends a trajectory setpoint to make the
- *        vehicle hover at 5 meters with a yaw angle of 180 degrees.
- */
-void OffboardControl::publish_trajectory_setpoint()
-{
-	TrajectorySetpoint msg{};
-	msg.position = {0.0, 0.0, -5.0};
-	msg.yaw = -3.14; // [-PI:PI]
-	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-	trajectory_setpoint_pub_->publish(msg);
-}
-
-/**
- * @brief Publish vehicle commands
- * @param command   Command code (matches VehicleCommand and MAVLink MAV_CMD codes)
- * @param param1    Command parameter 1
- * @param param2    Command parameter 2
- */
-void OffboardControl::publish_vehicle_command(uint16_t command, float param1, float param2)
-{
-	VehicleCommand msg{};
-	msg.param1 = param1;
-	msg.param2 = param2;
-	msg.command = command;
-	msg.target_system = 1;
-	msg.target_component = 1;
-	msg.source_system = 1;
-	msg.source_component = 1;
-	msg.from_external = true;
-	msg.timestamp = this->get_clock()->now().nanoseconds() / 1000;
-	vehicle_command_pub_->publish(msg);
-}
 
 int main(int argc, char *argv[])
 {
 	std::cout << "Starting offboard control node..." << std::endl;
 	setvbuf(stdout, NULL, _IONBF, BUFSIZ);
 	rclcpp::init(argc, argv);
-	rclcpp::spin(std::make_shared<OffboardControl>());
+	rclcpp::spin(std::make_shared<OffbRecv>());
 
 	rclcpp::shutdown();
 	return 0;

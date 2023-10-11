@@ -42,6 +42,13 @@ from launch.actions import ExecuteProcess
 
 def generate_launch_description():
 
+    px4_mc = ExecuteProcess(
+        cmd=[[
+            '~/Documents/PX4/Tools/simulation/gazebo-classic/sitl_multiple_run.sh -s "iris:1"'
+        ]],
+        shell=True
+    )
+
     micro_ros_agent = ExecuteProcess(
         cmd=[[
             'micro-ros-agent udp4 --port 8888 -v'
@@ -57,6 +64,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        px4_mc,
         micro_ros_agent,
         offb_recv
     ])
