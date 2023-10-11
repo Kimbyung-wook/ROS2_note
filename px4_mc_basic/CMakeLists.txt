@@ -41,9 +41,24 @@ target_include_directories(frame_transforms PUBLIC
 
 
 # OFFB_recv
-add_executable(OFFB_recv src/OFFB_recv.cpp)
-ament_target_dependencies(OFFB_recv rclcpp px4_msgs)
-install(TARGETS OFFB_recv DESTINATION lib/${PROJECT_NAME})
+function(build_this_file arg)
+	# echo "arguments : ${arg}"
+	add_executable(${arg} src/${arg}.cpp)
+	ament_target_dependencies(${arg} rclcpp px4_msgs)
+	install(TARGETS ${arg} DESTINATION lib/${PROJECT_NAME})
+endfunction()
+
+build_this_file("offb_recv")
+
+# set(FILENAME OFFB_recv)
+# add_executable(${FILENAME} src/${FILENAME}.cpp)
+# ament_target_dependencies(${FILENAME} rclcpp px4_msgs)
+# install(TARGETS ${FILENAME} DESTINATION lib/${PROJECT_NAME})
+
+# set(FILENAME OFFB_recv)
+# add_executable(${FILENAME} src/${FILENAME}.cpp)
+# ament_target_dependencies(${FILENAME} rclcpp px4_msgs)
+# install(TARGETS ${FILENAME} DESTINATION lib/${PROJECT_NAME})
 
 # # examples/listeners/vehicle_gps_position_listener
 # add_executable(vehicle_gps_position_listener src/examples/listeners/vehicle_gps_position_listener.cpp)
